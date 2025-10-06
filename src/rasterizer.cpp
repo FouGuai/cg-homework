@@ -30,7 +30,7 @@ void RasterizerImp::fill_pixel(size_t x, size_t y, size_t t, Color c) {
 // Rasterize a point: simple example to help you start familiarizing
 // yourself with the starter code.
 //
-void RasterizerImp::rasterize_point(float x, float y, size_t t, Color color) {
+void RasterizerImp::rasterize_point(float x, float y, Color color) {
   // fill in the nearest pixel
   int sx = (int)floor(x);
   int sy = (int)floor(y);
@@ -41,7 +41,9 @@ void RasterizerImp::rasterize_point(float x, float y, size_t t, Color color) {
   if (sy < 0 || sy >= height)
     return;
 
-  fill_pixel(sx, sy, t, color);
+  for (int t = 0; t < sample_rate; ++t) {
+    fill_pixel(sx, sy, t, color);
+  }
   return;
 }
 
@@ -63,7 +65,9 @@ void RasterizerImp::rasterize_line(float x0, float y0, float x1, float y1,
   }
 
   while (floor(pt[0]) <= floor(x1) && abs(pt[1] - y0) <= abs(y1 - y0)) {
-    rasterize_point(pt[0], pt[1], color);
+    for (int i = 0; i < this->sample_rate; ++i) {
+      rasterize_point(pt[0], pt[1],  color);
+    }
     pt[0] += dpt[0];
     pt[1] += dpt[1];
   }
@@ -124,14 +128,16 @@ void RasterizerImp::rasterize_triangle(float x0, float y0, float x1, float y1,
 
   for (int x = (int)xl; x <= xr; ++x) {
     for (int y = (int)yu; y <= yd; ++y) {
+      if (x >= width || y >= height) {
+        continue;
+      }
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
           float x_ = x + (i + 0.5) * step;
           float y_ = y + (j + 0.5) * step;
-          if (!inside(x_, y_)) {
-            continue;
+          if (inside(x_, y_)) {
+            fill_pixel(x, y, i * n + j, color);
           }
-          
         }
       }
     }
@@ -169,6 +175,8 @@ void RasterizerImp::set_sample_rate(unsigned int rate) {
   this->sample_rate = rate;
 
   this->sample_buffer.resize(width * height * this->sample_rate, Color::White);
+  clear_buffers();
+  // std::fill(this->sample_buffer.begin(), this->sample_buffer.end(), Color::White);
 }
 
 void RasterizerImp::set_framebuffer_target(unsigned char *rgb_framebuffer,
@@ -180,7 +188,8 @@ void RasterizerImp::set_framebuffer_target(unsigned char *rgb_framebuffer,
   this->height = height;
   this->rgb_framebuffer_target = rgb_framebuffer;
 
-  this->sample_buffer.resize(width * height, Color::White);
+  this->sample_buffer.resize(width * height * this->sample_rate, Color::White);
+  clear_buffers();
 }
 
 void RasterizerImp::clear_buffers() {
@@ -200,11 +209,16 @@ void RasterizerImp::resolve_to_framebuffer() {
 
   for (int x = 0; x < width; ++x) {
     for (int y = 0; y < height; ++y) {
-      Color col = sample_buffer[y * width + x];
+      Color color = Color::Black;
+
+      for (int t = 0; t < sample_rate; ++t) {
+        color += sample_buffer[(y * width + x) * sample_rate + t];
+      }
+      color *= 1.0 / sample_rate;
 
       for (int k = 0; k < 3; ++k) {
         this->rgb_framebuffer_target[3 * (y * width + x) + k] =
-            (&col.r)[k] * 255;
+            (&color.r)[k] * 255;
       }
     }
   }

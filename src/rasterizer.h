@@ -87,7 +87,7 @@ namespace CGL {
 
     // Rasterize a point
     // P0 = (x, y)
-    void rasterize_point(float x, float y, size_t t, Color color);
+    void rasterize_point(float x, float y, Color color);
 
     // Rasterize a line
     // From P0 = (x0, y0)
@@ -122,7 +122,7 @@ namespace CGL {
     void set_lsm(LevelSampleMethod l) { lsm = l; }
 
     // Fill a pixel, which may contain multiple samples
-    void fill_pixel(size_t x, size_t y, Color c);
+    void fill_pixel(size_t x, size_t y, size_t t, Color c);
 
     // This function sets the framebuffer target.  The block of memory
     // for the framebuffer contains 3 * width * height values for an RGB
