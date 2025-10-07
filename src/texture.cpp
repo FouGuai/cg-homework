@@ -29,23 +29,44 @@ namespace CGL {
   Color Texture::sample_nearest(Vector2D uv, int level) {
     // TODO: Task 5: Fill this in.
     auto& mip = mipmap[level];
+    // Clamp uv 在 [0,1]
+    uv.x = std::clamp(uv.x, 0.0, 1.0);
+    uv.y = std::clamp(uv.y, 0.0, 1.0);
 
+    int x = static_cast<int>(std::round(uv.x * (mip.width - 1)));
+    int y = static_cast<int>(std::round(uv.y * (mip.height - 1)));
 
-
-
-    // return magenta for invalid level
-    return Color(1, 0, 1);
+    return mip.get_texel(x, y);
   }
 
   Color Texture::sample_bilinear(Vector2D uv, int level) {
     // TODO: Task 5: Fill this in.
     auto& mip = mipmap[level];
 
+       // Clamp uv
+    uv.x = std::clamp(uv.x, 0.0, 1.0);
+    uv.y = std::clamp(uv.y, 0.0, 1.0);
 
+    float fx = uv.x * (mip.width - 1);
+    float fy = uv.y * (mip.height - 1);
 
+    int x0 = static_cast<int>(std::floor(fx));
+    int y0 = static_cast<int>(std::floor(fy));
+    int x1 = std::min(x0 + 1, static_cast<int>(mip.width - 1));
+    int y1 = std::min(y0 + 1, static_cast<int>(mip.height - 1));
 
-    // return magenta for invalid level
-    return Color(1, 0, 1);
+    float sx = fx - x0;
+    float sy = fy - y0;
+
+    Color c00 = mip.get_texel(x0, y0);
+    Color c10 = mip.get_texel(x1, y0);
+    Color c01 = mip.get_texel(x0, y1);
+    Color c11 = mip.get_texel(x1, y1);
+
+    // 双线性插值
+    Color c0 = c00 * (1 - sx) + c10 * sx;
+    Color c1 = c01 * (1 - sx) + c11 * sx;
+    return c0 * (1 - sy) + c1 * sy;
   }
 
 

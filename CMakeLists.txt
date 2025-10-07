@@ -10,8 +10,12 @@ option(BUILD_CUSTOM    "Build without reference"      OFF)
 
 set(BUILD_DEBUG ${BUILD_DEBUG} CACHE BOOL "Build debug" FORCE)
 
-if (BUILD_DEBUG)
-  set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON) 
+set(CMAKE_CXX_EXTENSIONS OFF) 
+
+if (BUILD_DEBUG)    
+  set(CMAKE_BUILD_TYPE Debug) 
 endif()
 
 #-------------------------------------------------------------------------------
