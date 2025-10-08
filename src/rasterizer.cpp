@@ -307,34 +307,34 @@ void RasterizerImp::rasterize_textured_triangle(float x0, float y0, float u0,
     return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
   };
 
+  auto calculate_uv = [&](float x, float y) -> Vector2D {
+    // 计算重心坐标
+    float denom = edge_cross(x0, y0, x1, y1, x2, y2);
+    float alpha = edge_cross(x, y, x1, y1, x2, y2) / denom;
+    float beta = edge_cross(x, y, x2, y2, x0, y0) / denom;
+    float gamma = edge_cross(x, y, x0, y0, x1, y1) / denom;
+
+    float u = alpha * u0 + beta * u1 + gamma * u2;
+    float v = alpha * v0 + beta * v1 + gamma * v2;
+    return Vector2D{u, v};
+  };
+
   for (int x = (int)xl; x <= std::min(static_cast<float>(width - 1), xr); ++x) {
     for (int y = (int)yu; y <= std::min(static_cast<float>(height - 1), yd);
          ++y) {
-      if (x >= width || y >= height) {
-        continue;
-      }
-
-      // 计算重心坐标
-      float denom = edge_cross(x0, y0, x1, y1, x2, y2);
-      if (denom == 0)
-        continue; // 防止退化三角形
-
-      float alpha = edge_cross(x, y, x1, y1, x2, y2) / denom;
-      float beta = edge_cross(x, y, x2, y2, x0, y0) / denom;
-      float gamma = edge_cross(x, y, x0, y0, x1, y1) / denom;
-
-      float u = alpha * u0 + beta * u1 + gamma * u2;
-      float v = alpha * v0 + beta * v1 + gamma * v2;
-
+      SampleParams sp;
+      sp.lsm = lsm;
+      sp.psm = psm;
+      sp.p_uv = calculate_uv(x, y);
+      sp.p_dx_uv = calculate_uv(x + 1, y);
+      sp.p_dy_uv = calculate_uv(x, y + 1);
+      Color c = tex.sample(sp);
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
           float x_ = x + (i + 0.5) * step;
           float y_ = y + (j + 0.5) * step;
           if (inside(x_, y_)) {
-            fill_pixel(x, y, i * n + j,
-                       (psm == P_NEAREST)
-                           ? tex.sample_nearest(Vector2D{u, v})
-                           : tex.sample_bilinear(Vector2D{u, v}));
+            fill_pixel(x, y, i * n + j, c);
           }
         }
       }
