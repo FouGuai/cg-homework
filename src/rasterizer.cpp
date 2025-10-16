@@ -1,5 +1,5 @@
 #include "rasterizer.h"
-
+#include <cmath>
 using namespace std;
 
 namespace CGL {
@@ -15,6 +15,8 @@ RasterizerImp::RasterizerImp(PixelSampleMethod psm, LevelSampleMethod lsm,
 
   sample_buffer.resize(width * height * sample_rate, Color::White);
 }
+
+bool equal(float x, float y) { return std::abs(x - y) < 1e-5; }
 
 // Used by rasterize_point and rasterize_line
 void RasterizerImp::fill_pixel(size_t x, size_t y, size_t t, Color c) {
@@ -89,17 +91,17 @@ void RasterizerImp::rasterize_triangle(float x0, float y0, float x1, float y1,
   bool lefttop1 = islefttop(x1, y1, x2, y2);
   bool lefttop2 = islefttop(x2, y2, x0, y0);
 
-  auto inside = [=](float x, float y) -> bool {
-    auto cross = [](float x, float y, float x0, float y0, float x1,
-                    float y1) -> float {
-      float dx = x1 - x0;
-      float dy = y1 - y0;
+  auto inside = [=](double x, double y) -> bool {
+    auto cross = [](double x, double y, double x0, double y0, double x1,
+                    double y1) -> double {
+      double dx = x1 - x0;
+      double dy = y1 - y0;
       return (x - x0) * dy - (y - y0) * dx;
     };
 
-    float e0 = cross(x, y, x0, y0, x1, y1);
-    float e1 = cross(x, y, x1, y1, x2, y2);
-    float e2 = cross(x, y, x2, y2, x0, y0);
+    double e0 = cross(x, y, x0, y0, x1, y1);
+    double e1 = cross(x, y, x1, y1, x2, y2);
+    double e2 = cross(x, y, x2, y2, x0, y0);
 
     // check opengel edge rule
     bool all_positive = (e0 > 0 || (e0 == 0 && lefttop0)) &&
@@ -156,7 +158,6 @@ void RasterizerImp::rasterize_interpolated_color_triangle(float x0, float y0,
   // can reuse code from rasterize_triangle
 
   // TODO: Task 1: Implement basic triangle rasterization here, no supersampling
-
   auto islefttop = [](float x0, float y0, float x1, float y1) -> bool {
     if (y0 == y1) {
       return x1 > x0;
@@ -168,73 +169,63 @@ void RasterizerImp::rasterize_interpolated_color_triangle(float x0, float y0,
   bool lefttop1 = islefttop(x1, y1, x2, y2);
   bool lefttop2 = islefttop(x2, y2, x0, y0);
 
-  auto inside = [=](float x, float y) -> bool {
-    auto cross = [](float x, float y, float x0, float y0, float x1,
-                    float y1) -> float {
-      float dx = x1 - x0;
-      float dy = y1 - y0;
-      return (x - x0) * dy - (y - y0) * dx;
+  auto inside = [=](double x, double y) -> bool {
+    auto cross = [](double x, double y, double x0, double y0, double x1, double y1) -> double {
+      return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
     };
 
-    float e0 = cross(x, y, x0, y0, x1, y1);
-    float e1 = cross(x, y, x1, y1, x2, y2);
-    float e2 = cross(x, y, x2, y2, x0, y0);
+    double e0 = cross(x, y, x0, y0, x1, y1);
+    double e1 = cross(x, y, x1, y1, x2, y2);
+    double e2 = cross(x, y, x2, y2, x0, y0);
 
-    // check opengel edge rule
     bool all_positive = (e0 > 0 || (e0 == 0 && lefttop0)) &&
                         (e1 > 0 || (e1 == 0 && lefttop1)) &&
                         (e2 > 0 || (e2 == 0 && lefttop2));
-    if (all_positive) {
-      return true;
-    }
+    if (all_positive) return true;
 
-    bool all_negative = (e0 < 0 || (e0 == 0 && lefttop0)) &&
-                        (e1 < 0 || (e1 == 0 && lefttop1)) &&
-                        (e2 < 0 || (e2 == 0 && lefttop2));
+    bool all_negative = (e0 < 0 || (e0 == 0 && !lefttop0)) &&
+                        (e1 < 0 || (e1 == 0 && !lefttop1)) &&
+                        (e2 < 0 || (e2 == 0 && !lefttop2));
     return all_negative;
   };
 
-  // calculate bounding box
+  // Calculate bounding box
   float xl = std::min({x0, x1, x2});
   float xr = std::max({x0, x1, x2});
   float yu = std::min({y0, y1, y2});
   float yd = std::max({y0, y1, y2});
 
-  // fix: For per row, we can find left most and right most and fill pixel
-  // between both it.
   int n = static_cast<int>(std::sqrt(this->sample_rate));
   float step = 1.0f / n;
 
-  // mangal function, used to calulate inteporater cordinatory
-  auto edge_cross = [](float x, float y, float x0, float y0, float x1,
-                       float y1) {
+  auto edge_cross = [](float x, float y, float x0, float y0, float x1, float y1) {
     return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
   };
 
+  // Rasterize the triangle
   for (int x = (int)xl; x <= std::min(static_cast<float>(width - 1), xr); ++x) {
-    for (int y = (int)yu; y <= std::min(static_cast<float>(height - 1), yd);
-         ++y) {
-      if (x >= width || y >= height) {
-        continue;
-      }
+    for (int y = (int)yu; y <= std::min(static_cast<float>(height - 1), yd); ++y) {
+      if (x >= width || y >= height) continue;
 
-      // 计算重心坐标
+      float x_c = x + 0.5f, y_c = y + 0.5f;
+
       float denom = edge_cross(x0, y0, x1, y1, x2, y2);
-      if (denom == 0)
-        continue; // 防止退化三角形
+      if (denom == 0.0f) continue;  // Avoid division by zero
 
-      float alpha = edge_cross(x, y, x1, y1, x2, y2) / denom;
-      float beta = edge_cross(x, y, x2, y2, x0, y0) / denom;
-      float gamma = edge_cross(x, y, x0, y0, x1, y1) / denom;
+      float alpha = edge_cross(x_c, y_c, x1, y1, x2, y2) / denom;
+      float beta = edge_cross(x_c, y_c, x2, y2, x0, y0) / denom;
+      float gamma = 1.0f - alpha - beta;
 
       Color color = alpha * c0 + beta * c1 + gamma * c2;
 
+      // Subpixel sampling
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
-          float x_ = x + (i + 0.5) * step;
-          float y_ = y + (j + 0.5) * step;
+          float x_ = x + (i + 0.5f) * step;
+          float y_ = y + (j + 0.5f) * step;
+          if (x_ >= width || y_ >= height) continue;
           if (inside(x_, y_)) {
-            fill_pixel(x, y, i * n + j, color);
+            fill_pixel(x_, y_, i * n + j, color);
           }
         }
       }
@@ -264,17 +255,17 @@ void RasterizerImp::rasterize_textured_triangle(float x0, float y0, float u0,
   bool lefttop1 = islefttop(x1, y1, x2, y2);
   bool lefttop2 = islefttop(x2, y2, x0, y0);
 
-  auto inside = [=](float x, float y) -> bool {
-    auto cross = [](float x, float y, float x0, float y0, float x1,
-                    float y1) -> float {
-      float dx = x1 - x0;
-      float dy = y1 - y0;
+  auto inside = [=](double x, double y) -> bool {
+    auto cross = [](double x, double y, double x0, double y0, double x1,
+                    double y1) -> double {
+      double dx = x1 - x0;
+      double dy = y1 - y0;
       return (x - x0) * dy - (y - y0) * dx;
     };
 
-    float e0 = cross(x, y, x0, y0, x1, y1);
-    float e1 = cross(x, y, x1, y1, x2, y2);
-    float e2 = cross(x, y, x2, y2, x0, y0);
+    double e0 = cross(x, y, x0, y0, x1, y1);
+    double e1 = cross(x, y, x1, y1, x2, y2);
+    double e2 = cross(x, y, x2, y2, x0, y0);
 
     // check opengel edge rule
     bool all_positive = (e0 > 0 || (e0 == 0 && lefttop0)) &&
@@ -312,7 +303,7 @@ void RasterizerImp::rasterize_textured_triangle(float x0, float y0, float u0,
     float denom = edge_cross(x0, y0, x1, y1, x2, y2);
     float alpha = edge_cross(x, y, x1, y1, x2, y2) / denom;
     float beta = edge_cross(x, y, x2, y2, x0, y0) / denom;
-    float gamma = edge_cross(x, y, x0, y0, x1, y1) / denom;
+    float gamma = 1 - alpha - beta;
 
     float u = alpha * u0 + beta * u1 + gamma * u2;
     float v = alpha * v0 + beta * v1 + gamma * v2;
